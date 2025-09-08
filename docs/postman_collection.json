@@ -1,0 +1,238 @@
+{
+  "info": {
+    "name": "Agentic RAG Framework",
+    "description": "REST API for agentic RAG pipeline with Ollama and HNSW",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        },
+        "description": "Check if the server is running and healthy"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["health"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": \"healthy\",\n  \"message\": \"Agentic RAG Framework is running\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Chat - Simple Query",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"What are the key HR policies?\",\n  \"k\": 2\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/chat",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["chat"]
+        },
+        "description": "Send a simple chat message without conversation history"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What are the key HR policies?\",\n  \"k\": 2\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/chat",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["chat"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"response\": \"Based on the HR policies, here are the key policies...\",\n  \"context\": \"[maternity_leave_policy.pdf]\\nMaternity Leave Policy...\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Chat - With History",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Tell me more about PTO policy\",\n  \"k\": 3,\n  \"history\": [\n    [\"User\", \"What are the HR policies?\"],\n    [\"Assistant\", \"Here are the key HR policies...\"]\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/chat",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["chat"]
+        },
+        "description": "Send a chat message with conversation history for context"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Tell me more about PTO policy\",\n  \"k\": 3,\n  \"history\": [\n    [\"User\", \"What are the HR policies?\"],\n    [\"Assistant\", \"Here are the key HR policies...\"]\n  ]\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/chat",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["chat"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"response\": \"The PTO (Paid Time Off) policy includes...\",\n  \"context\": \"[pto_policy.pdf]\\nPaid Time Off Policy...\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Chat - PDF Document Query",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"What is the maternity leave policy?\",\n  \"k\": 1\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/chat",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["chat"]
+        },
+        "description": "Query specifically about PDF document content"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What is the maternity leave policy?\",\n  \"k\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/chat",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["chat"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"response\": \"The maternity leave policy provides...\",\n  \"context\": \"[maternity_leave_policy.pdf]\\nMaternity Leave Policy for full-time and part-time female employees...\"\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}
