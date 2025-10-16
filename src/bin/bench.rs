@@ -1,5 +1,8 @@
 use std::env;
 use std::fs;
+use std::time::{Duration, Instant};
+use futures::stream::{self, StreamExt};
+use tokio::sync::Semaphore;
 use serde_json::{self, Value};
 use agentic_rag_framework::{agent::{PipelineConfig, AgentOrchestrator, OrchestratorContext, AgentInput, AgentOutput, agent_registry_with_defaults}, RAG};
 
@@ -42,17 +45,31 @@ async fn build_orchestrator(config_path: &str) -> Result<(AgentOrchestrator, Age
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Usage: cargo run --bin bench -- <workflow.json> <num> <concurrency>
     let args: Vec<String> = env::args().collect();
-    let config_path = if args.len() > 1 { &args[1] } else { "agent_flow.json" };
-    println!("[INFO] Using workflow pipeline: {}", config_path);
+    let config_path = args.get(1).map(|s| s.as_str()).unwrap_or("agent_flow.json");
+    let num: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1000);
+    let concurrency: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(256);
+    println!("[BENCH] workflow={} num={} concurrency={}", config_path, num, concurrency);
 
     let (orchestrator, input) = build_orchestrator(config_path).await?;
+    let orchestrator = std::sync::Arc::new(orchestrator);
+    let sem = std::sync::Arc::new(Semaphore::new(concurrency));
 
-    let result = orchestrator.handle_job(input).await?;
-    match result {
-        AgentOutput::ReplyDraft(reply) => println!("Suggested Reply: {}", reply),
-        AgentOutput::Other(v) => println!("Pipeline final result: {}", v),
-        other => println!("Pipeline result: {:?}", other),
-    }
+    let started = Instant::now();
+    let tasks = (0..num).map(|_| {
+        let orchestrator = orchestrator.clone();
+        let sem = sem.clone();
+        let input = input.clone();
+        async move {
+            let _permit = sem.acquire_owned().await.unwrap();
+            let _ = orchestrator.handle_job(input).await;
+        }
+    });
+
+    stream::iter(tasks).buffer_unordered(concurrency).collect::<Vec<_>>().await;
+    let elapsed = started.elapsed();
+    let eps = (num as f64) / elapsed.as_secs_f64();
+    println!("[BENCH] Completed {} runs in {:?} ({:.2} ops/sec)", num, elapsed, eps);
     Ok(())
 }

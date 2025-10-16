@@ -1,0 +1,70 @@
+{
+  "info": {
+    "_postman_id": "b6c3d6e2-2c9a-4f1c-9a1b-remote-agent-demo",
+    "name": "Remote HTTP Agent - Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Execute Remote Agent",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Set dynamic headers or variables before the request",
+              "pm.variables.set('ts', new Date().toISOString());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 2xx', function () {",
+              "  pm.response.to.be.success;",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "pm.test('Response is JSON object', function () {",
+              "  pm.expect(typeof json).to.eql('object');",
+              "});",
+              "",
+              "// If your remote agent returns a reply/context, capture them",
+              "if (json.reply) pm.collectionVariables.set('last_reply', json.reply);",
+              "if (json.context) pm.collectionVariables.set('last_context', json.context);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{REMOTE_AGENT_TOKEN}}", "type": "text", "disabled": true },
+          { "key": "X-Trace", "value": "{{TRACE_ID}}", "disabled": true },
+          { "key": "X-Timestamp", "value": "{{ts}}", "disabled": true }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"Email\",\n  \"email\": \"From: user@example.com\\nSubject: Demo\\nBody: Hello from Postman test.\"\n}"
+        },
+        "url": {
+          "raw": "{{REMOTE_AGENT_URL}}",
+          "host": [
+            "{{REMOTE_AGENT_URL}}"
+          ]
+        }
+      },
+      "response": []
+    }
+    
+  ],
+  "variable": [
+    { "key": "REMOTE_AGENT_URL", "value": "https://example-remote-agent.yourdomain.com/execute" },
+    { "key": "REMOTE_AGENT_TOKEN", "value": "", "type": "string" },
+    { "key": "TRACE_ID", "value": "demo-abc-123" }
+  ]
+}

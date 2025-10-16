@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
@@ -136,10 +137,10 @@ pub struct PipelineConfig {
 #[async_trait]
 pub trait AgentJob: Send + Sync {
     async fn run(&self, input: AgentInput) -> Result<AgentOutput, Box<dyn std::error::Error>>;
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> where Self: Sized;
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> where Self: Sized;
 }
 
-pub type AgentConstructor = fn(&serde_json::Value, &OrchestratorContext) -> Box<dyn AgentJob>;
+pub type AgentConstructor = fn(&serde_json::Value, &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync>;
 
 pub struct AgentRegistry {
     registry: HashMap<String, AgentConstructor>,
@@ -154,7 +155,7 @@ impl AgentRegistry {
             |params, ctx| T::from_params(params, ctx),
         );
     }
-    pub fn get(&self, name: &str, params: &serde_json::Value, ctx: &OrchestratorContext) -> Option<Box<dyn AgentJob>> {
+    pub fn get(&self, name: &str, params: &serde_json::Value, ctx: &OrchestratorContext) -> Option<Box<dyn AgentJob + Send + Sync>> {
         self.registry.get(name).map(|ctor| ctor(params, ctx))
     }
 }
@@ -173,11 +174,13 @@ pub fn agent_registry_with_defaults() -> AgentRegistry {
     reg
 }
 
+#[derive(Debug, Clone)]
 pub enum AgentInput {
     Email(String),
     EmailWithContext { email: String, context: String },
 }
 
+#[derive(Debug, Clone)]
 pub enum AgentOutput {
     StructEmail { from: String, subject: String, body: String },
     ContextResult(String),
@@ -196,19 +199,19 @@ pub struct OrchestratorContext {
 // Each agent impls from_params and AgentJob
 pub struct EmailReaderAgent;
 impl EmailReaderAgent {
-    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Box::new(Self) }
+    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Box::new(Self) }
 }
 #[async_trait]
 impl AgentJob for EmailReaderAgent {
     async fn run(&self, input: AgentInput) -> Result<AgentOutput, Box<dyn std::error::Error>> {
         Ok(AgentOutput::StructEmail { from: "from@demo.com".into(), subject: "Test Subject".into(), body: "Email Body".into() })
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Self::from_params(params, ctx) }
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Self::from_params(params, ctx) }
 }
 
 pub struct RAGContextAgent { pub rag: std::sync::Arc<crate::RAG> }
 impl RAGContextAgent {
-    pub fn from_params(_params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    pub fn from_params(_params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Box::new(Self { rag: ctx.rag.clone().unwrap() })
     }
 }
@@ -221,14 +224,14 @@ impl AgentJob for RAGContextAgent {
         let ctx = self.rag.retrieve_context(&query, 2).await?;
         Ok(AgentOutput::ContextResult(ctx))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
 pub struct ReplyGeneratorAgent { pub llm_config: String }
 impl ReplyGeneratorAgent {
-    pub fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    pub fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         let config = ctx.llm_config.clone()
             .or_else(|| params.get("model").and_then(|v| v.as_str().map(|s| s.to_string())))
             .unwrap_or_else(|| "llama3.2".to_string());
@@ -238,16 +241,18 @@ impl ReplyGeneratorAgent {
 #[async_trait]
 impl AgentJob for ReplyGeneratorAgent {
     async fn run(&self, _input: AgentInput) -> Result<AgentOutput, Box<dyn std::error::Error>> {
-        Ok(AgentOutput::ReplyDraft("Thank you for your email. [demo reply]".into()))
+        let reply = "Thank you for your email. [demo reply]".to_string();
+        let tokens = estimate_tokens(&reply);
+        Ok(AgentOutput::ReplyDraft(format!("{} [tokens:{}]", reply, tokens)))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
 pub struct LeadDataReaderAgent;
 impl LeadDataReaderAgent {
-    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Box::new(Self) }
+    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Box::new(Self) }
 }
 #[async_trait]
 impl AgentJob for LeadDataReaderAgent {
@@ -258,14 +263,14 @@ impl AgentJob for LeadDataReaderAgent {
             "leads": [{"id": 1, "score": 0.8}, {"id": 2, "score": 0.6}]
         })))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
 pub struct FeatureEngineerAgent;
 impl FeatureEngineerAgent {
-    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Box::new(Self) }
+    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Box::new(Self) }
 }
 #[async_trait]
 impl AgentJob for FeatureEngineerAgent {
@@ -274,14 +279,14 @@ impl AgentJob for FeatureEngineerAgent {
         let engineered = serde_json::json!({ "features": [1.0, 0.5, 0.7] });
         Ok(AgentOutput::Other(engineered))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
 pub struct ModelOptimizeAgent;
 impl ModelOptimizeAgent {
-    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Box::new(Self) }
+    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Box::new(Self) }
 }
 #[async_trait]
 impl AgentJob for ModelOptimizeAgent {
@@ -289,14 +294,14 @@ impl AgentJob for ModelOptimizeAgent {
         let mock_report = serde_json::json!({ "model": "random_forest", "roc_auc": 0.87 });
         Ok(AgentOutput::Other(mock_report))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
 pub struct ReportWriterAgent;
 impl ReportWriterAgent {
-    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> { Box::new(Self) }
+    pub fn from_params(_params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> { Box::new(Self) }
 }
 #[async_trait]
 impl AgentJob for ReportWriterAgent {
@@ -304,7 +309,7 @@ impl AgentJob for ReportWriterAgent {
         // Output summary report string
         Ok(AgentOutput::ReplyDraft("Campaign optimization completed and report generated.".to_string()))
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
@@ -319,7 +324,7 @@ pub struct RemoteHttpAgent {
     pub retry_backoff_ms: u64,
 }
 impl RemoteHttpAgent {
-    pub fn from_params(params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    pub fn from_params(params: &serde_json::Value, _ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let method = params.get("method").and_then(|v| v.as_str()).unwrap_or("POST").to_string();
         let headers = params.get("headers").and_then(|v| v.as_object()).map(|m| {
@@ -373,7 +378,8 @@ impl AgentJob for RemoteHttpAgent {
                         let json_val: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status":"ok"}));
                         // Map known fields to AgentOutput variants when possible
                         if let Some(reply) = json_val.get("reply").and_then(|v| v.as_str()) {
-                            return Ok(AgentOutput::ReplyDraft(reply.to_string()));
+                            let tokens = estimate_tokens(reply);
+                            return Ok(AgentOutput::ReplyDraft(format!("{} [tokens:{}]", reply, tokens)));
                         }
                         if let Some(ctx) = json_val.get("context").and_then(|v| v.as_str()) {
                             return Ok(AgentOutput::ContextResult(ctx.to_string()));
@@ -400,13 +406,50 @@ impl AgentJob for RemoteHttpAgent {
             }
         }
     }
-    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob> {
+    fn from_params(params: &serde_json::Value, ctx: &OrchestratorContext) -> Box<dyn AgentJob + Send + Sync> {
         Self::from_params(params, ctx)
     }
 }
 
+fn estimate_tokens(text: &str) -> usize {
+    // Simple heuristic: ~1 token per 4 chars (fallback to whitespace split)
+    let by_len = (text.len() as f64 / 4.0).ceil() as usize;
+    let by_ws = text.split_whitespace().count();
+    std::cmp::max(by_len, by_ws)
+}
+
+pub struct TraceRecorder {
+    pool: sqlx::SqlitePool,
+}
+impl TraceRecorder {
+    pub async fn new(database_url: &str) -> Result<Self, sqlx::Error> {
+        let pool = sqlx::SqlitePool::connect(database_url).await?;
+        // Create table if not exists
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS traces (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                ts TEXT NOT NULL,\n                workflow TEXT NOT NULL,\n                agent_type TEXT NOT NULL,\n                step_index INTEGER NOT NULL,\n                input_len INTEGER NOT NULL,\n                output_kind TEXT NOT NULL,\n                duration_ms INTEGER NOT NULL\n            )"
+        ).execute(&pool).await?;
+        Ok(Self { pool })
+    }
+    pub async fn record(&self, workflow: &str, agent_type: &str, step_index: usize, input_len: usize, output_kind: &str, duration_ms: i64) -> Result<(), sqlx::Error> {
+        let ts: DateTime<Utc> = Utc::now();
+        sqlx::query("INSERT INTO traces (ts, workflow, agent_type, step_index, input_len, output_kind, duration_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+            .bind(ts.to_rfc3339())
+            .bind(workflow)
+            .bind(agent_type)
+            .bind(step_index as i64)
+            .bind(input_len as i64)
+            .bind(output_kind)
+            .bind(duration_ms)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
 pub struct AgentOrchestrator {
-    pub steps: Vec<Box<dyn AgentJob>>,
+    pub steps: Vec<Box<dyn AgentJob + Send + Sync>>,
+    pub tracer: Option<std::sync::Arc<TraceRecorder>>,
+    pub workflow_name: String,
 }
 impl AgentOrchestrator {
     pub fn from_json_registry(conf: PipelineConfig, ctx: OrchestratorContext, registry: &AgentRegistry) -> Self {
@@ -414,15 +457,32 @@ impl AgentOrchestrator {
             .into_iter()
             .map(|step| registry.get(&step.agent_type, &step.params, &ctx).expect("Unknown agent type"))
             .collect();
-        Self { steps }
+        Self { steps, tracer: None, workflow_name: "default".to_string() }
+    }
+    pub fn with_tracer(mut self, tracer: std::sync::Arc<TraceRecorder>, workflow_name: impl Into<String>) -> Self {
+        self.tracer = Some(tracer);
+        self.workflow_name = workflow_name.into();
+        self
     }
     pub async fn handle_job(&self, initial: AgentInput) -> Result<AgentOutput, Box<dyn std::error::Error>> {
         let mut data = initial;
-        for agent in &self.steps {
-            data = match agent.run(data).await? {
+        for (idx, agent) in self.steps.iter().enumerate() {
+            let start = std::time::Instant::now();
+            let input_len = match &data { AgentInput::Email(s) => s.len(), AgentInput::EmailWithContext { email, context } => email.len() + context.len() };
+            let out = agent.run(data).await?;
+            let duration = start.elapsed().as_millis() as i64;
+            let output_kind = match &out { AgentOutput::StructEmail { .. } => "StructEmail", AgentOutput::ContextResult(_) => "ContextResult", AgentOutput::ReplyDraft(_) => "ReplyDraft", AgentOutput::Other(_) => "Other" };
+            if let Some(rec) = &self.tracer {
+                let _ = rec.record(&self.workflow_name, std::any::type_name::<&Box<dyn AgentJob + Send + Sync>>(), idx, input_len, output_kind, duration).await;
+            }
+            data = match out {
                 AgentOutput::StructEmail { from, subject, body } => AgentInput::EmailWithContext { email: body, context: "".to_string() },
                 AgentOutput::ContextResult(ctx) => AgentInput::EmailWithContext { email: "".to_string(), context: ctx },
-                AgentOutput::ReplyDraft(reply) => return Ok(AgentOutput::ReplyDraft(reply)),
+                AgentOutput::ReplyDraft(reply) => {
+                    // Ensure token annotation even if upstream forgot
+                    let annotated = if reply.contains("[tokens:") { reply } else { format!("{} [tokens:{}]", reply, estimate_tokens(&reply)) };
+                    return Ok(AgentOutput::ReplyDraft(annotated));
+                },
                 AgentOutput::Other(v) => { println!("Unrecognized output: {v:?}"); return Ok(AgentOutput::Other(v)); }
             };
         }
