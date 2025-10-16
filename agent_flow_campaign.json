@@ -1,0 +1,22 @@
+{
+  "agents": [
+    {
+      "agent_type": "LeadDataReaderAgent",
+      "params": {"source": "leads.csv"},
+      "input": {"type": "Email", "email": "From: ops@company.com\nSubject: Campaign\nBody: Optimize Q2 campaign."}
+    },
+    {
+      "agent_type": "RemoteHttpAgent",
+      "params": {
+        "url": "https://example-remote-agent.yourdomain.com/score",
+        "method": "POST",
+        "timeout_ms": 4000,
+        "retry_count": 2,
+        "retry_backoff_ms": 500
+      }
+    },
+    { "agent_type": "FeatureEngineerAgent", "params": {"strategy": "basic"} },
+    { "agent_type": "ModelOptimizeAgent", "params": {"model_type": "random_forest", "max_iter": 10} },
+    { "agent_type": "ReportWriterAgent", "params": {"format": "pdf"} }
+  ]
+}

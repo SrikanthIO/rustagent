@@ -39,7 +39,7 @@ pub async fn health_check() -> Json<HealthResponse> {
 }
 
 pub async fn chat_handler(
-    State(rag): State<Arc<RAG<'static>>>,
+    State(rag): State<Arc<RAG>>,
     Json(payload): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, StatusCode> {
     let k = payload.k.unwrap_or(2);
@@ -79,7 +79,7 @@ pub async fn chat_handler(
     }))
 }
 
-pub fn create_router(rag: Arc<RAG<'static>>) -> Router {
+pub fn create_router(rag: Arc<RAG>) -> Router {
     Router::new()
         .route("/health", get(health_check))
         .route("/chat", post(chat_handler))

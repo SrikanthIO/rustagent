@@ -5,7 +5,7 @@ use tracing::{info, error};
 
 use crate::{RAG, Config, create_router};
 
-pub async fn start_server(rag: Arc<RAG<'static>>, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_server(rag: Arc<RAG>, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router(rag);
     
     let addr = format!("{}:{}", config.server_host, config.server_port);
@@ -32,7 +32,7 @@ pub async fn run_server_mode(config: Config) -> Result<(), Box<dyn std::error::E
     let rag = RAG::new(ollama, config.embed_model.clone(), &config.docs_dir).await?;
     let rag = Arc::new(rag);
     
-    info!("✅ RAG system initialized with {} documents", rag.doc_texts.len());
+    info!("✅ RAG system initialized");
     
     // Start server
     start_server(rag, &config).await?;

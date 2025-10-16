@@ -1,0 +1,25 @@
+{
+  "agents": [
+    {
+      "agent_type": "EmailReaderAgent",
+      "params": {},
+      "input": {
+        "type": "Email",
+        "email": "From: user@example.com\nSubject: Time Off\nBody: I would like to take leave next week."
+      }
+    },
+    {
+      "agent_type": "RemoteHttpAgent",
+      "params": {
+        "url": "https://example-remote-agent.yourdomain.com/execute",
+        "method": "POST",
+        "headers": { "X-Trace": "abc123" },
+        "timeout_ms": 5000,
+        "retry_count": 3,
+        "retry_backoff_ms": 400
+      }
+    },
+    { "agent_type": "RAGContextAgent", "params": { "top_k": 2 } },
+    { "agent_type": "ReplyGeneratorAgent", "params": { "model": "llama3.2" } }
+  ]
+}
